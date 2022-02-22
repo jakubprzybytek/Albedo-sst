@@ -16,5 +16,9 @@
     "eu-west-1a",
     "eu-west-1b",
     "eu-west-1c"
-  ]
+  ],
+  "security-group:account=198805281865:region=eu-west-1:securityGroupId=sg-0a386f0799a3e878f": {
+    "securityGroupId": "sg-0a386f0799a3e878f",
+    "allowAllOutbound": false
+  }
 }

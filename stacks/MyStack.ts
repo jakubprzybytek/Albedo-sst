@@ -19,7 +19,6 @@ export default class MyStack extends sst.Stack {
       ]
     });
 
-    // Create an ECS cluster
     const cluster = new ecs.Cluster(this, 'Cluster', {
       vpc,
     });
@@ -28,7 +27,7 @@ export default class MyStack extends sst.Stack {
         vpc
     });
     // ToDo: point to LB instead of anyIPv4
-    asgSecurityGroup.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(80), 'Accept trafic from LB');
+    asgSecurityGroup.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(80), 'Accept traffic from LB');
 
     const autoScalingGroup = new autoscaling.AutoScalingGroup(this, 'ASG', {
       vpc,
@@ -45,6 +44,10 @@ export default class MyStack extends sst.Stack {
 
     cluster.addAsgCapacityProvider(capacityProvider);
 
+    // ToDo: add vpc peering
+    const etfSecurityGroup = ec2.SecurityGroup.fromLookupById(this, 'eft-sg', 'sg-0a386f0799a3e878f');
+    etfSecurityGroup.addIngressRule(asgSecurityGroup, ec2.Port.tcp(2049), 'Accept traffic from ASG');
+
     const logging = new ecs.AwsLogDriver({ streamPrefix: "Logs" });
 
     const repository = ecr.Repository.fromRepositoryName(this, 'albedo-image-repository', 'albedo');
@@ -52,16 +55,16 @@ export default class MyStack extends sst.Stack {
     const taskDefinition = new ecs.Ec2TaskDefinition(this, 'TaskDef', {
       networkMode: ecs.NetworkMode.BRIDGE
     });
-    // taskDefinition.addVolume({
-    //   name: 'AlbedoData',
-    //   efsVolumeConfiguration: {
-    //     fileSystemId: 'fs-1c58ff28',
-    //     rootDirectory: '/albedo',
-    //     transitEncryption: 'ENABLED'
-    //   }
-    // });
+    taskDefinition.addVolume({
+      name: 'AlbedoData',
+      efsVolumeConfiguration: {
+        fileSystemId: 'fs-1c58ff28',
+        rootDirectory: '/albedo',
+        transitEncryption: 'ENABLED'
+      }
+    });
 
-    taskDefinition.addContainer('DefaultContainer', {
+    const container = taskDefinition.addContainer('DefaultContainer', {
       image: ecs.ContainerImage.fromEcrRepository(repository, 'latest'),
       memoryReservationMiB: 258,
       memoryLimitMiB: 1024,
@@ -69,6 +72,12 @@ export default class MyStack extends sst.Stack {
       logging
     });
 
+    container.addMountPoints({
+      containerPath: '/usr/data',
+      readOnly: true,
+      sourceVolume: 'AlbedoData'
+    });
+    
     // Instantiate an Amazon ECS Service
     const ecsService = new ecs.Ec2Service(this, 'Service', {
       cluster,
